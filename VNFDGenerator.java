@@ -51,26 +51,9 @@ public class VNFDGeneratorOSM {
 	private Map<String, Map<String, String>> cpSubstituteMap = new HashMap<String, Map<String, String>>(); // <nodeName,
 																											// Map<cpOldName,
 																											// cpNewName>>
-	private Map<String, Map<String, Object>> noExtInterfaceMap = new HashMap<String, Map<String, Object>>(); // <nodeName,
-																												// Map<The
-																												// external-interfaces
-																												// that
-																												// are
-																												// not
-																												// defined
-																												// as
-																												// external
-																												// in
-																												// the
-																												// nodeModel>
-	private Map<String, List<Map<String, Object>>> newInternalInterfaceMap = new HashMap<String, List<Map<String, Object>>>(); // <nodeName,
-																																// List<New
-																																// Internal
-																																// Interfaces>
-	private Map<String, List<Map<String, String>>> newInternalConnPointMap = new HashMap<String, List<Map<String, String>>>(); // <nodeName,
-																																// List<New
-																																// Internal
-																																// ConnectionPoints>
+	private Map<String, Map<String, Object>> noExtInterfaceMap = new HashMap<String, Map<String, Object>>(); // <nodeName, Map<vmName, List<Map<oldNameInterface, Map<The external-interfaces that are not defined as external in the nodeModel>>>>>
+	private Map<String, Map<String, Object>> newInternalInterfaceMap = new HashMap<String, Map<String, Object>>(); // <nodeName, Map<vmName, List<NewInternal Interfaces>>>
+	private Map<String, Map<String, Object>> newInternalConnPointMap = new HashMap<String, Map<String, Object>>(); // <nodeName, List<New InternalConnectionPoints>
 	private Map<String, LinkedList<String>> internalConnectionInternalConnPointMap = new HashMap<String, LinkedList<String>>(); // <connectionName,<internalConnPointsNames>>
 	// final yaml variables
 	private List<Map<String, Object>> connectionPoint = new ArrayList<Map<String, Object>>();
@@ -334,20 +317,19 @@ public class VNFDGeneratorOSM {
 				System.out.println("nodeName " + nodeName);
 				if (nodeVdu.get(nodeName) != null) {
 					List<Map<String, Object>> nodeVduList = nodeVdu.get(nodeName);
-
+					List<Map<String, String>> deleteExtInterfaceList = new  ArrayList<Map<String,String>>();
 					System.out.println("nodeVduList" + nodeVduList);
 					System.out.println(nodeVduList.size());
 					Iterator<Map<String, Object>> itr = nodeVduList.listIterator();
 					while (itr.hasNext()) {
 						Map<String, Object> vm = itr.next();
-						System.out.println(vm);
-						List<Map<String, String>> extInterface = (List<Map<String, String>>) vm
-								.get("external-interface");
+						System.out.println("vm"+vm);
+						List<Map<String, String>> extInterface = (List<Map<String, String>>) vm.get("external-interface");
 						System.out.println(extInterface.size());
 						System.out.println("vm.get(external-interface) " + vm.get("external-interface"));
-						int i = 0;
+						
 						for (Map<String, String> extInterfaceMap : extInterface) {
-							i++;
+							
 							System.out.println("extInterfaceMap " + extInterfaceMap);
 							String oldName = extInterfaceMap.get("vnfd-connection-point-ref");
 							System.out.println("oldname:" + oldName);
@@ -358,36 +340,62 @@ public class VNFDGeneratorOSM {
 								extInterfaceMap.put("vnfd-connection-point-ref",
 										cpSubstituteMap.get(nodeName).get(oldName));
 							} else {
-								// System.out.println("No Añado oldname:" +
-								// oldName);
+								 System.out.println("No Añado oldname:" +oldName);
+								 deleteExtInterfaceList.add(extInterfaceMap);
+								 System.out.println("deleteExtInterfaceList " + deleteExtInterfaceList);
+
 								if (noExtInterfaceMap.containsKey(nodeName)) {
 									Map<String, Object> aux = noExtInterfaceMap.get(nodeName);
-									aux.put(oldName, extInterfaceMap);
+									if (aux.containsKey((String) vm.get("name"))){
+										List<Map<String, Object>> listAux = (List<Map<String, Object>>) aux.get((String) vm.get("name"));
+										Map<String, Object> aux2 = new HashMap<String, Object>();
+										aux2.put(oldName, extInterfaceMap);
+										listAux.add(aux2);
+										
+									}else{
+										List<Map<String, Object>> listAux = new ArrayList<Map<String,Object>>();
+										Map<String, Object> aux2 = new HashMap<String, Object>();
+										aux2.put(oldName, extInterfaceMap);
+										listAux.add(aux2);
+										aux.put((String) vm.get("name"), listAux);
+									}
+									
 
 								} else {
 									Map<String, Object> aux = new HashMap<String, Object>();
 									Map<String, Object> aux2 = new HashMap<String, Object>();
+									List<Map<String, Object>> listAux = new ArrayList<Map<String,Object>>();
 									aux.put(oldName, extInterfaceMap);
-									aux2.put((String) vm.get("name"), aux);
+									listAux.add(aux);
+									aux2.put((String) vm.get("name"), listAux);
 
 									noExtInterfaceMap.put(nodeName, aux2);
 									System.out.println("noExtInterfaceMap " + noExtInterfaceMap);
+									
 								}
-								if (extInterface.size() == 1) {
-									vm.remove("external-interface");
-								} else {
-									extInterface.remove(i);
+								
 
-								}
 							}
+							
 						}
-
+						//Delete all the external interfaces that are not defined as external interfaces in the NodeModel
+						for(Map<String, String> extInterfaceMap: deleteExtInterfaceList){
+							extInterface.remove(extInterfaceMap);
+						}
+						if(extInterface.isEmpty()){
+							vm.remove("external-interface");
+						}
+						
+						System.out.println("Vm despues de borrrar"+vm);
 					}
 
 					if (!cpExists) {
 						erroInfo = "The ConnectionPoint " + cpName + " does not exist";
 						return erroInfo;
 					}
+					
+
+					
 				}
 			}
 		}
@@ -406,80 +414,27 @@ public class VNFDGeneratorOSM {
 		// internal-interface according to internal connection
 		for (String nodeName : nodeConnectionPointsMap.keySet()) {
 			List<Map<String, Object>> intInterfaceList = new ArrayList<Map<String, Object>>();
-			List<Map<String, String>> intConnPointList = new ArrayList<Map<String, String>>();
+			List<Map<String, Object>> intConnPointList = new ArrayList<Map<String, Object>>();
 			for (String connection : internalConnectionsMap.keySet()) {
 				System.out.println("connection " + connection);
 				String connFirst = internalConnectionsMap.get(connection).getFirst();
 				System.out.println("connFirst " + connFirst);
 				String connLast = internalConnectionsMap.get(connection).getLast();
-				System.out.println("connLast " + connFirst);
+				System.out.println("connLast " + connLast);
+				
 				if (nodeName.equals(connFirst.split("\\.")[0])) {
-					String interfaceName = nodeConnectionPointsMap.get(nodeName).get(connFirst.split("\\.")[1]);
-					System.out.println(interfaceName);
-					Map<String, String> interfaceMap = new HashMap<String, String>();
-					for (String vmName : noExtInterfaceMap.get(connFirst.split("\\.")[0]).keySet()) {
-						if (((Map<String, Map<String, String>>) noExtInterfaceMap.get(connFirst.split("\\.")[0])
-								.get(vmName)).get(interfaceName) != null) {
-							interfaceMap = ((Map<String, Map<String, String>>) noExtInterfaceMap
-									.get(connFirst.split("\\.")[0]).get(vmName)).get(interfaceName);
-							intInterfaceList.add(generateInternalInterface(interfaceMap.get("name")));
-							intConnPointList.add(generateInternalConnectionPoint(interfaceMap.get("name")));
-
-							// Set internal ConnectionPoints (internal-vld)
-							if (internalConnectionInternalConnPointMap.containsKey(connection)) {
-								LinkedList<String> connPointList = internalConnectionInternalConnPointMap
-										.get(connection);
-								connPointList.add(interfaceMap.get("name"));
-							} else {
-								LinkedList<String> connPointList = new LinkedList<String>();
-								connPointList.add(interfaceMap.get("name"));
-								internalConnectionInternalConnPointMap.put(connection, connPointList);
-							}
-						} else {
-							erroInfo = "The Connection Point " + interfaceName + " in the ConnectionPoint (NEMO) "
-									+ connFirst + " does not exist";
-							return erroInfo;
-						}
+					erroInfo = setConnPointMatch(nodeConnectionPointsMap, nodeName, connFirst, connection);
+					if(erroInfo != null){
+						return erroInfo;
 					}
 				}
 				if (nodeName.equals(connLast.split("\\.")[0])) {
-					System.out.println(nodeName);
-					String interfaceName = nodeConnectionPointsMap.get(nodeName).get(connLast.split("\\.")[1]);
-					Map<String, String> interfaceMap = new HashMap<String, String>();
-					System.out.println(interfaceName);
-					for (String vmName : noExtInterfaceMap.get(connFirst.split("\\.")[0]).keySet()) {
-						if (((Map<String, Map<String, String>>) noExtInterfaceMap.get(connFirst.split("\\.")[0])
-								.get(vmName)).get(interfaceName) != null) {
-							interfaceMap = ((Map<String, Map<String, String>>) noExtInterfaceMap
-									.get(connFirst.split("\\.")[0]).get(vmName)).get(interfaceName);
-							intInterfaceList.add(generateInternalInterface(interfaceMap.get("name")));
-							intConnPointList.add(generateInternalConnectionPoint(interfaceMap.get("name")));
-							// Set internal ConnectionPoints (internal-vld)
-							if (internalConnectionInternalConnPointMap.containsKey(connection)) {
-								LinkedList<String> connPointList = internalConnectionInternalConnPointMap
-										.get(connection);
-								connPointList.add(interfaceMap.get("name"));
-							} else {
-								LinkedList<String> connPointList = new LinkedList<String>();
-								connPointList.add(interfaceMap.get("name"));
-								internalConnectionInternalConnPointMap.put(connection, connPointList);
-							}
-						} else {
-							erroInfo = "The Connection Point " + interfaceName + " in the ConnectionPoint (NEMO) "
-									+ connFirst + " does not exist";
-							return erroInfo;
-						}
+					
+					erroInfo =setConnPointMatch(nodeConnectionPointsMap, nodeName, connLast, connection);
+					if(erroInfo != null){
+						return erroInfo;
 					}
-
 				}
-			}
-
-			if (!intInterfaceList.isEmpty()) {
-				newInternalInterfaceMap.put(nodeName, intInterfaceList);
-			}
-
-			if (!intConnPointList.isEmpty()) {
-				newInternalConnPointMap.put(nodeName, intConnPointList);
 			}
 
 		}
@@ -489,7 +444,58 @@ public class VNFDGeneratorOSM {
 				"[VNFDGeneratorOSM] internalConnectionInternalConnPointMap: " + internalConnectionInternalConnPointMap);
 		return erroInfo;
 	}
-
+	private String setConnPointMatch(Map<String, Map<String, String>> nodeConnectionPointsMap, String nodeName, String connPoint, String connection){
+		System.out.println(nodeName);
+		String erroInfo = null;
+		String interfaceName = nodeConnectionPointsMap.get(nodeName).get(connPoint.split("\\.")[1]);
+		//Map<String, String> interfaceMap = new HashMap<String, String>();
+		System.out.println(interfaceName);
+		Boolean interfaceExists = false;
+		for (String vmName : noExtInterfaceMap.get(connPoint.split("\\.")[0]).keySet()) {
+			List<Map<String, Object>> interfacesList = (List<Map<String, Object>>) noExtInterfaceMap.get(connPoint.split("\\.")[0]).get(vmName);
+			for (Map<String, Object> oldInterfaceMap : interfacesList) {
+				if (oldInterfaceMap.get(interfaceName) != null) {
+					Map<String, Object> interfaceMap = (Map<String, Object>) oldInterfaceMap.get(interfaceName);
+					System.out.println("interfaceMap"+interfaceMap);
+					interfaceExists = true;
+					String newInternalInterfaceName=(String) interfaceMap.get("name");
+					
+					setNewInternalInterface(nodeName, vmName, newInternalInterfaceName);
+					setNewInternalConnPoint(nodeName, vmName, newInternalInterfaceName);
+					setIntConnectionIntConnPoint(connection, newInternalInterfaceName);
+				}
+			}
+		}
+			if(!interfaceExists) {
+				erroInfo = "The Connection Point " + interfaceName + " in the ConnectionPoint (NEMO) "
+						+ connPoint + " does not exist";
+				return erroInfo;
+			}
+		return erroInfo;
+	}
+	private void setNewInternalInterface(String nodeName, String vmName, String newInternalInterfaceName){
+		if(newInternalInterfaceMap.containsKey(nodeName)){
+			Map<String, Object> aux = newInternalInterfaceMap.get(nodeName);
+			if(aux.containsKey(vmName)){
+				List<Map<String, Object>> listAux = (List<Map<String, Object>>) aux.get(vmName);
+				listAux.add(generateInternalInterface(newInternalInterfaceName));
+			}else{
+				List<Map<String, Object>> listAux = new ArrayList<Map<String,Object>>();
+				listAux.add(generateInternalInterface(newInternalInterfaceName));
+				aux.put(vmName, listAux);
+			}
+		}else{
+			Map<String, Object> aux = new HashMap<String, Object>();
+			List<Map<String, Object>> listAux = new ArrayList<Map<String,Object>>();
+			listAux.add(generateInternalInterface(newInternalInterfaceName));
+			aux.put(vmName, listAux);
+			newInternalInterfaceMap.put(nodeName, aux);
+		}
+		
+		System.out.println("newInternalInterfaceMap "+newInternalInterfaceMap);
+	}
+	
+	
 	private Map<String, Object> generateInternalInterface(String intName) {
 		Map<String, Object> internal_interface = new LinkedHashMap<String, Object>();
 		internal_interface.put("name", intName);
@@ -501,13 +507,47 @@ public class VNFDGeneratorOSM {
 		return internal_interface;
 	}
 
-	private Map<String, String> generateInternalConnectionPoint(String intName) {
-		Map<String, String> internal_connection_point = new LinkedHashMap<String, String>();
+	private void setNewInternalConnPoint(String nodeName, String vmName, String newInternalInterfaceName){
+		if(newInternalConnPointMap.containsKey(nodeName)){
+			Map<String, Object> aux = newInternalConnPointMap.get(nodeName);
+			if(aux.containsKey(vmName)){
+				List<Map<String, Object>> listAux = (LinkedList<Map<String, Object>>) aux.get(vmName);
+				listAux.add( generateInternalConnectionPoint(newInternalInterfaceName));
+			}else{
+				List<Map<String, Object>> listAux = new ArrayList<Map<String,Object>>();
+				listAux.add( generateInternalConnectionPoint(newInternalInterfaceName));
+				aux.put(vmName, listAux);
+			}
+		}else{
+			Map<String, Object> aux = new HashMap<String, Object>();
+			List<Map<String, Object>> listAux = new LinkedList<Map<String,Object>>();
+			listAux.add( generateInternalConnectionPoint(newInternalInterfaceName));
+			aux.put(vmName, listAux);
+			newInternalConnPointMap.put(nodeName, aux);
+		}
+		
+		System.out.println("newInternalConnPointMap "+newInternalConnPointMap);
+	}
+	private Map<String, Object> generateInternalConnectionPoint(String intName) {
+		Map<String, Object> internal_connection_point = new LinkedHashMap<String, Object>();
 		internal_connection_point.put("name", intName);
 		internal_connection_point.put("id", intName);
 		internal_connection_point.put("type", "VPORT");
 
 		return internal_connection_point;
+	}
+	
+	private void setIntConnectionIntConnPoint(String connection, String newInternalInterfaceName ){
+		// Set internal ConnectionPoints (internal-vld)
+		if (internalConnectionInternalConnPointMap.containsKey(connection)) {
+			LinkedList<String> connPointList = internalConnectionInternalConnPointMap
+					.get(connection);
+			connPointList.add(newInternalInterfaceName);
+		} else {
+			LinkedList<String> connPointList = new LinkedList<String>();
+			connPointList.add(newInternalInterfaceName);
+			internalConnectionInternalConnPointMap.put(connection, connPointList);
+		}
 	}
 	/*
 	 * Generating vdu section
@@ -520,7 +560,7 @@ public class VNFDGeneratorOSM {
 		if (erroInfo != null) {
 			return erroInfo;
 		}
-		// Generating internal interface and internal-connection-point for each
+		// Generating new internal interface and internal-connection-point for each
 		// node
 		erroInfo = setAuxInternalInterface(nodeConnectionPointsMap);
 		if (erroInfo != null) {
@@ -533,32 +573,34 @@ public class VNFDGeneratorOSM {
 			System.out.println("NodeName:" + nodeName);
 			List<Map<String, Object>> vdu_vm = nodeVdu.get(nodeName);
 			for (Map<String, Object> vm : vdu_vm) {
-
+				System.out.println("vm "+vm);
+				String vduVmName = (String)vm.get("name");
+				//Adding new internal interfaces
 				if (vm.containsKey("internal-interface")) {
-					List<Map<String, Object>> finalInterfaceList = new LinkedList<Map<String, Object>>();
-					List<Map<String, Object>> intInterfaceList = (List<Map<String, Object>>) vm
-							.get("internal-interface");
+				
+					List<Map<String,Object>> intInterfaceList = (List<Map<String,Object>>) vm.get("internal-interface");
+					checkNewInternalSection(newInternalInterfaceMap,nodeName, vduVmName, intInterfaceList);
 					System.out.println("intInterfaceList " + intInterfaceList);
-					finalInterfaceList.addAll(intInterfaceList);
 
-					List<Map<String, Object>> newIntInterfaceList = newInternalInterfaceMap.get(nodeName);
-					System.out.println("newIntInterfaceList " + newIntInterfaceList);
-					if (newIntInterfaceList != null) {
-						finalInterfaceList.addAll(newIntInterfaceList);
-					}
-					vm.put("internal-interface", finalInterfaceList);
-					// Iterator<Map<String, Object>> itr2=
-					// newIntInterfaceList.iterator();
-					// while(itr2.hasNext()){
-					// intInterfaceList.add(itr2.next());
-					// }
 				} else {
-					List<Map<String, Object>> newIntInterfaceList = new LinkedList<Map<String, Object>>();
-					newIntInterfaceList = newInternalInterfaceMap.get(nodeName);
-					System.out.println("newIntInterfaceList " + newIntInterfaceList);
-					if (newIntInterfaceList != null) {
-						vm.put("internal-interface", newIntInterfaceList);
-					}
+					List<Map<String,Object>> intInterfaceList = new LinkedList<Map<String,Object>>();
+					checkNewInternalSection(newInternalInterfaceMap,nodeName, vduVmName, intInterfaceList);
+					vm.put("internal-interface",intInterfaceList );
+					System.out.println("intInterfaceList " + intInterfaceList);
+				}
+				
+				//Adding new internal connection points
+				if (vm.containsKey("internal-connection-point")) {
+					
+					List<Map<String,Object>> intConnPointList = (List<Map<String,Object>>) vm.get("internal-connection-point");
+					checkNewInternalSection(newInternalConnPointMap, nodeName, vduVmName, intConnPointList);
+					System.out.println("intInterfaceList " + intConnPointList);
+
+				} else {
+					List<Map<String,Object>> intConnPointList = new LinkedList<Map<String,Object>>();
+					checkNewInternalSection(newInternalConnPointMap,nodeName, vduVmName, intConnPointList);
+					vm.put("internal-connection-point",intConnPointList );
+					System.out.println("intInterfaceList " + intConnPointList);
 				}
 
 				String vm_id_name = "Ref_VM" + i;
@@ -569,6 +611,8 @@ public class VNFDGeneratorOSM {
 			}
 
 		}
+		
+		
 		// Adding all the vnfcs
 		for (String nodeName : nodeVdu.keySet()) {
 			vdu.addAll(nodeVdu.get(nodeName));
@@ -580,6 +624,21 @@ public class VNFDGeneratorOSM {
 		return erroInfo;
 	}
 
+	private void checkNewInternalSection(Map<String, Map<String, Object>> map, String nodeName, String vduVmName, List<Map<String,Object>> intInterfaceList){
+		if( map.get(nodeName)!= null){
+			Map<String,Object> newIntInterfaceList = new LinkedHashMap<String,Object>();
+			newIntInterfaceList = map.get(nodeName);
+			for(String vmName: newIntInterfaceList.keySet()){
+				if (vmName.equals(vduVmName)){
+					List<Map<String,Object>> interfaceList = (List<Map<String,Object>>) newIntInterfaceList.get(vmName);
+					for(Map<String, Object> newInterfaceMap : interfaceList){
+						intInterfaceList.add(newInterfaceMap);
+					}
+				}
+			}
+
+		}
+	}
 	/*
 	 * Generating internal-vld section
 	 * 
@@ -680,7 +739,7 @@ public class VNFDGeneratorOSM {
 		// options.setExplicitStart(true);
 		String path2 = System.getProperty("user.dir");
 		System.out.println(path2);
-		String finalName = "Ref" + instanceName.replace(".", "_") + "_vnfd";
+		String finalName = "Ref_" + instanceName.replace(".", "_") + "_vnfd";
 		System.out.println(finalName);
 		Yaml yaml = new Yaml(options);
 		StringWriter writer = new StringWriter();
